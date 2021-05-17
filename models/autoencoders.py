@@ -40,7 +40,6 @@ class BaseVariational(torch.nn.Module):
                 kl += kl_
         return kl
 
-
 class DeepEncoderSmall(BaseVariational):
     '''
     Takes in as input batches of images of size [batch_size, 40, 40, 3]
@@ -65,8 +64,15 @@ class DeepEncoderSmall(BaseVariational):
                 Conv2d(in_channels=128, out_channels=256,
                           kernel_size=3, stride=2, padding=1),
                 ReLU(),
+                Conv2d(in_channels=256, out_channels=256,
+                          kernel_size=3, stride=3, padding=4),
+                ReLU(),
                 Conv2d(in_channels=256, out_channels=512,
                           kernel_size=3, stride=1, padding=1),
+                BatchNorm2d(512),
+                ReLU(),
+                Conv2d(in_channels=512, out_channels=512,
+                          kernel_size=3, stride=3, padding=4),
                 BatchNorm2d(512),
                 ReLU(),
                 Conv2d(in_channels=512, out_channels=1024,
@@ -75,48 +81,6 @@ class DeepEncoderSmall(BaseVariational):
                 ReLU(),
                 Conv2d(in_channels=1024, out_channels=1024,
                           kernel_size=3, stride=3, padding=4),
-                BatchNorm2d(1024),
-                ReLU(),
-                Dropout2d(p=0.25),
-                Flatten(),
-                Dropout(p=0.4),
-                Linear(9216, int(9216 / 9)),
-                ReLU(),
-                Dropout(p=0.4),
-                BayesianLayer(int(9216 / 9), self.latent_size)]
-        return layers
-
-
-class EncoderSmall(BaseVariational):
-    '''
-    Takes in as input batches of images of size [batch_size, 40, 40, 3]
-    '''
-    def __init__(self, latent_size=9):
-        super().__init__()
-        self.latent_size = latent_size
-        self.layers = torch.nn.ModuleList(self._init_layers())
-
-    def _init_layers(self):
-        layers = [
-                Conv2d(in_channels=3, out_channels=32,
-                      kernel_size=3, stride=2, padding=1),
-                ReLU(),
-                Conv2d(in_channels=32, out_channels=64,
-                          kernel_size=3, stride=2, padding=1),
-                ReLU(),
-                Conv2d(in_channels=64, out_channels=128,
-                          kernel_size=3, stride=2, padding=1),
-                BatchNorm2d(128),
-                ReLU(),
-                Conv2d(in_channels=128, out_channels=256,
-                          kernel_size=3, stride=2, padding=1),
-                ReLU(),
-                Conv2d(in_channels=256, out_channels=512,
-                          kernel_size=3, stride=1, padding=1),
-                BatchNorm2d(512),
-                ReLU(),
-                Conv2d(in_channels=512, out_channels=1024,
-                          kernel_size=3, stride=1, padding=1),
                 BatchNorm2d(1024),
                 ReLU(),
                 Dropout2d(p=0.25),
@@ -159,12 +123,25 @@ class DeepDecoderSmall(BaseVariational):
                 BatchNorm2d(512),
                 Dropout2d(p=0.25),
                 ReLU(),
+                ConvTranspose2d(in_channels=512, out_channels=512,
+                          kernel_size=3, stride=3, padding=3),
+                BatchNorm2d(512),
+                Dropout2d(p=0.25),
+                ReLU(),
                 ConvTranspose2d(in_channels=512, out_channels=256,
                           kernel_size=3, stride=2, padding=1, output_padding=1),
                 BatchNorm2d(256),
                 ReLU(),
+                ConvTranspose2d(in_channels=256, out_channels=256,
+                          kernel_size=3, stride=3, padding=3),
+                BatchNorm2d(256),
+                ReLU(),
                 ConvTranspose2d(in_channels=256, out_channels=128,
                           kernel_size=3, stride=2, padding=1),
+                BatchNorm2d(128),
+                ReLU(),
+                ConvTranspose2d(in_channels=128, out_channels=128,
+                          kernel_size=3, stride=3, padding=3),
                 BatchNorm2d(128),
                 ReLU(),
                 ConvTranspose2d(in_channels=128, out_channels=64,
@@ -206,6 +183,47 @@ class DeepDecoderSmall(BaseVariational):
         return x
 
 
+
+class EncoderSmall(BaseVariational):
+    '''
+    Takes in as input batches of images of size [batch_size, 40, 40, 3]
+    '''
+    def __init__(self, latent_size=9):
+        super().__init__()
+        self.latent_size = latent_size
+        self.layers = torch.nn.ModuleList(self._init_layers())
+
+    def _init_layers(self):
+        layers = [
+                Conv2d(in_channels=3, out_channels=32,
+                      kernel_size=3, stride=2, padding=1),
+                ReLU(),
+                Conv2d(in_channels=32, out_channels=64,
+                          kernel_size=3, stride=2, padding=1),
+                ReLU(),
+                Conv2d(in_channels=64, out_channels=128,
+                          kernel_size=3, stride=2, padding=1),
+                BatchNorm2d(128),
+                ReLU(),
+                Conv2d(in_channels=128, out_channels=256,
+                          kernel_size=3, stride=2, padding=1),
+                ReLU(),
+                Conv2d(in_channels=256, out_channels=512,
+                          kernel_size=3, stride=1, padding=1),
+                BatchNorm2d(512),
+                ReLU(),
+                Conv2d(in_channels=512, out_channels=1024,
+                          kernel_size=3, stride=1, padding=1),
+                BatchNorm2d(1024),
+                ReLU(),
+                Dropout2d(p=0.25),
+                Flatten(),
+                Dropout(p=0.4),
+                Linear(9216, int(9216 / 9)),
+                ReLU(),
+                Dropout(p=0.4),
+                BayesianLayer(int(9216 / 9), self.latent_size)]
+        return layers
 
 class DecoderSmall(BaseVariational):
     '''
@@ -260,6 +278,7 @@ class DecoderSmall(BaseVariational):
                 Tanh()
             ]
         return layers
+
 
 class CnnAE(torch.nn.Module):
     def __init__(self, encoder, decoder):
