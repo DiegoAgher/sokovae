@@ -1,6 +1,17 @@
 import torch
+import torchvision
 import matplotlib.pyplot as plt
 from IPython import display as displ
+
+
+means = torch.tensor([0.5, 0.5, 0.5], dtype=torch.float32)
+stds = torch.tensor([0.5, 0.5, 0.5], dtype=torch.float32)
+to_tensor = torchvision.transforms.Compose([
+                                torchvision.transforms.ToTensor(),
+                                torchvision.transforms.Normalize(
+                                                        mean=means,
+                                                        std=stds)
+                             ])
 
 def denormalize(normed_img):
     return normed_img * stds[:, None, None] + means[:, None, None]
