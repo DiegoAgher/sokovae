@@ -84,7 +84,7 @@ class Trainer:
                   if not self.only_train:
                       epoch_eval_loss = eval_model_loss(self.model, loss_function, loader) 
 
-                _, (state, action, next_state) = next(enumerate(self.loader))
+                _, (state, action, next_state) = next(enumerate(loader))
                 show_img(state)
                 show_img(state_hat.detach())
 
