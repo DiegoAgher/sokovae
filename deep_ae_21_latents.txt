@@ -1,0 +1,4 @@
+"deep" ae with latent size 21, zero penalization, one layout with most configs.
+
+                  Total of ~ 120 epochs of training
+              0.0186763349920511250.018584780395030975
