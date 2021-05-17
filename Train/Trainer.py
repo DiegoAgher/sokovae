@@ -1,6 +1,6 @@
 import torch
 import matplotlib.pyplot as plt
-
+from IPython import display as displ
 
 def denormalize(normed_img):
     return normed_img * stds[:, None, None] + means[:, None, None]
@@ -20,7 +20,7 @@ class Trainer:
         self.train_losses = []
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-3)
 
-    def train_one_epoch(self, penalization, model, epoch_id, loss_function):
+    def train_one_epoch(self, penalization, epoch_id, loss_function):
         self.model.train()
 
         mse = torch.nn.MSELoss()
