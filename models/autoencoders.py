@@ -4,8 +4,7 @@ from torch.nn import Module, Linear
 from torch.nn import ReLU, Conv2d, ConvTranspose2d, Tanh
 from torch.nn import BatchNorm2d, Dropout, Dropout2d, Flatten
 
-from .MyLayers import BayesianLayer
-
+from .bayeslayers import BayesianLayer
 
 class BaseVariational(torch.nn.Module):
     def __init__(self):
@@ -22,21 +21,17 @@ class BaseVariational(torch.nn.Module):
         return x
 
     def predict(self, x, num_forward_passes=10):
-        batch_size = x.shape[0]
-
-        # TODO: make n random forward passes
-        latent = self.forward(x)
+        pred = self.forward(x)
         for i in range(num_forward_passes - 1):
-            latent += self.forward(x)
-        latent = latent / num_forward_passes
+            pred += self.forward(x)
+        pred = pred / num_forward_passes
 
         return latent
-    
+   
     def kl_loss(self):
         '''
         Computes the KL divergence loss for all layers.
         '''
-        # TODO: enter your code here
         kl = 0
         for i, layer in enumerate(self.layers):
             if isinstance(layer, BayesianLayer):
@@ -140,4 +135,43 @@ class DecoderSmall(BaseVariational):
                 Tanh()
             ]
         return layers
+
+class CnnAE(torch.nn.Module):
+    def __init__(self, encoder, decoder):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, x):
+        latent_representation = self.encoder(x)
+        reconstruction = self.decoder(latent_representation)
+        return reconstruction
+
+    def predict(self, x, num_forward_passes=10):
+
+        latent_representation = self.encoder(x)
+        reconstruction = self.decoder(latent_representation)
+
+        for i in range(num_forward_passes - 1):
+            curr_latent = self.encoder(x)
+            latent_representation += curr_latent
+            reconstruction += self.decoder(curr_latent)
+        latent_representation = latent_representation / num_forward_passes
+        reconstruction = reconstruction / num_forward_passes
+
+        return latent_representation, reconstruction
+    def params(self):
+        return list(self.encoder.parameters()) + list(self.decoder.parameters())
+
+
+    def kl_loss(self):
+        '''
+        Computes the KL divergence loss for all layers.
+        '''
+        kl = 0
+        for i, layer in enumerate(self.encoder.layers):
+            if isinstance(layer, BayesianLayer):
+                kl_ = layer.kl_divergence()
+                kl += kl_
+        return kl
 
