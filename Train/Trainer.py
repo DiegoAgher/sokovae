@@ -29,7 +29,7 @@ class Trainer:
 
         loader = self.train_loader
         for batch_idx, (state, action, next_state) in enumerate(loader):
-            optimizer.zero_grad()
+            self.optimizer.zero_grad()
 
             z = self.model.encoder(state)
             state_hat = self.model.decoder(z)
