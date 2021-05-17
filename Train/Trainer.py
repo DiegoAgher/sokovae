@@ -27,7 +27,7 @@ class Trainer:
         if loss_function is None and not(loss_function == 'both'):
           loss_function = mse
 
-        loader = self.train_losses 
+        loader = self.train_loader
         for batch_idx, (state, action, next_state) in enumerate(loader):
             optimizer.zero_grad()
 
