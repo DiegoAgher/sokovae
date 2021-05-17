@@ -140,10 +140,6 @@ class DeepDecoderSmall(BaseVariational):
                           kernel_size=3, stride=2, padding=1),
                 BatchNorm2d(128),
                 ReLU(),
-                ConvTranspose2d(in_channels=128, out_channels=128,
-                          kernel_size=3, stride=3, padding=3),
-                BatchNorm2d(128),
-                ReLU(),
                 ConvTranspose2d(in_channels=128, out_channels=64,
                       kernel_size=3, stride=2, padding=2),
                 BatchNorm2d(64),
@@ -312,6 +308,63 @@ class CnnAE(torch.nn.Module):
         '''
         Computes the KL divergence loss for all layers.
         '''
+        kl = 0
+        for i, layer in enumerate(self.encoder.layers):
+            if isinstance(layer, BayesianLayer):
+                kl_ = layer.kl_divergence()
+                kl += kl_
+        return kl
+
+
+
+class CondCnnAE(torch.nn.Module):
+    def __init__(self, encoder, action_encoder, decoder):
+        super(CondCnnAE, self).__init__()
+        self.encoder = encoder
+        self.action_encoder = action_encoder
+        self.decoder = decoder
+        
+
+    def forward(self, x, action):
+        encoded_x = self.encoder(x)
+        encoded_action = self.action_encoder(action)
+        encoded_blend = encoded_x + encoded_action 
+        reconstruction = self.decoder(encoded_blend)
+        return reconstruction
+
+    def predict(self, x, num_forward_passes=10):
+
+        # TODO: make n random forward passes
+        encoded_x = self.encoder(x)
+        encoded_action = self.action_encoder(action)
+        encoded_blend = x + encoded_action
+        reconstruction = self.decoder(encoded_blend)
+
+        for i in range(num_forward_passes - 1):
+            curr_enc_x = self.encoder(x)
+            encoded_x += curr_enc_x
+
+            curr_enc_a = self.action_encoder(action)
+            #TODO if encoding of action is VAE then do M samples
+            
+            curr_blend = curr_enc_x + curr_enc_a
+
+            reconstruction += self.decoder(curr_blend)
+
+        encoded_x = encoded_x / num_forward_passes
+        reconstruction = reconstruction / num_forward_passes
+
+        return encoded_x, reconstruction
+    
+    def params(self):
+        return list(self.encoder.parameters()) + list(self.decoder.parameters())
+
+
+    def kl_loss(self):
+        '''
+        Computes the KL divergence loss for all layers.
+        '''
+        # TODO: enter your code here
         kl = 0
         for i, layer in enumerate(self.encoder.layers):
             if isinstance(layer, BayesianLayer):
