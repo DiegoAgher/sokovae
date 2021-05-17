@@ -108,32 +108,32 @@ class DeepDecoderSmall(BaseVariational):
         self.start_decodeb = Linear(int(9216 / 9), 9216)
         self.drop_linear_two = Dropout(p=0.4)
         layers = [
+                # ConvTranspose2d(in_channels=1024, out_channels=1024,
+                #           kernel_size=3, stride=3, padding=3),
+                # BatchNorm2d(1024),
+                # Dropout2d(p=0.25),
+                # ReLU(),
                 ConvTranspose2d(in_channels=1024, out_channels=1024,
-                          kernel_size=3, stride=3, padding=3),
-                BatchNorm2d(1024),
-                Dropout2d(p=0.25),
-                ReLU(),
-                ConvTranspose2d(in_channels=1024, out_channels=1024,
-                          kernel_size=3, stride=3, padding=3),
+                          kernel_size=3, stride=3, padding=3, output_padding=1),
                 BatchNorm2d(1024),
                 Dropout2d(p=0.25),
                 ReLU(),
                 ConvTranspose2d(in_channels=1024, out_channels=512,
-                          kernel_size=3, stride=2, padding=1, output_padding=1),
+                          kernel_size=3, stride=2, padding=1),
                 BatchNorm2d(512),
                 Dropout2d(p=0.25),
                 ReLU(),
-                ConvTranspose2d(in_channels=512, out_channels=512,
-                          kernel_size=3, stride=3, padding=3),
-                BatchNorm2d(512),
-                Dropout2d(p=0.25),
-                ReLU(),
+                # ConvTranspose2d(in_channels=512, out_channels=512,
+                #           kernel_size=3, stride=3, padding=3),
+                # BatchNorm2d(512),
+                # Dropout2d(p=0.25),
+                # ReLU(),
                 ConvTranspose2d(in_channels=512, out_channels=256,
-                          kernel_size=3, stride=2, padding=1, output_padding=1),
+                                kernel_size=3, stride=2, padding=3),
                 BatchNorm2d(256),
                 ReLU(),
                 ConvTranspose2d(in_channels=256, out_channels=256,
-                          kernel_size=3, stride=3, padding=3),
+                          kernel_size=3, stride=2, padding=3),
                 BatchNorm2d(256),
                 ReLU(),
                 ConvTranspose2d(in_channels=256, out_channels=128,
@@ -145,22 +145,22 @@ class DeepDecoderSmall(BaseVariational):
                 BatchNorm2d(64),
                 ReLU(),
                 ConvTranspose2d(in_channels=64, out_channels=32,
-                          kernel_size=3, stride=1, padding=1),
+                          kernel_size=3, stride=1, padding=2),
                 BatchNorm2d(32),
                 ReLU(),
                 ConvTranspose2d(in_channels=32, out_channels=16,
-                                          kernel_size=3, stride=1, padding=1),
+                                          kernel_size=3, stride=1, padding=2),
                 ReLU(),
                 BatchNorm2d(16),
                 Conv2d(in_channels=16, out_channels=8,
                           kernel_size=4, stride=1, padding=1),
-                ReLU(),   
+                ReLU(),
                 Conv2d(in_channels=8, out_channels=3,
                           kernel_size=3, stride=1, padding=0),
-                Tanh()    
+                Tanh()
             ]
         return layers
-    
+
     def forward(self, x, debug=False):
         x = self.start_decode(x)
         x = self.drop_linear_one(x)
@@ -177,7 +177,6 @@ class DeepDecoderSmall(BaseVariational):
                 print("shape {}".format(x.shape))
                 print("")
         return x
-
 
 
 class EncoderSmall(BaseVariational):
