@@ -12,15 +12,16 @@ def show_img(img_tensor):
     plt.show()
 
 class Trainer:
-    def __init__(self, train_loader, eval_loader=None):
+    def __init__(self, model,train_loader, eval_loader=None):
+        self.model = model
         self.train_loader = train_loader
         self.eval_loader = eval_loader
         self.only_train = True if eval_loader is None else False
         self.train_losses = []
-        self.optimizer = torch.optim.Adam(ae.parameters(), lr=3e-3)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-3)
 
     def train_one_epoch(self, penalization, model, epoch_id, loss_function):
-        model.train()
+        self.model.train()
 
         mse = torch.nn.MSELoss()
         if loss_function is None and not(loss_function == 'both'):
@@ -30,8 +31,8 @@ class Trainer:
         for batch_idx, (state, action, next_state) in enumerate(loader):
             optimizer.zero_grad()
 
-            z = model.encoder(state)
-            state_hat = model.decoder(z)
+            z = self.model.encoder(state)
+            state_hat = self.model.decoder(z)
             if loss_function == 'both':
               recon_loss_x = mse(state_hat, state)
               small_obj = make_small_objects_important(state_hat, state)
@@ -41,7 +42,7 @@ class Trainer:
               loss = loss_recon_x
 
             if penalization > 0.0:
-                kl_loss = M_N * penalization * ae.kl_loss()
+                kl_loss = M_N * penalization * self.model.kl_loss()
                 loss_new = kl_loss + loss
                 if use_action:
                   action_kl = M_N * penalization * action_enc[4].kl_divergence()
@@ -54,7 +55,7 @@ class Trainer:
 
             if (batch_idx % 100 == 0):
                 displ.clear_output()
-                model.eval()
+                self.model.eval()
                 mse_eval = nn.MSELoss()
                 if loss_function == 'both':
                   epoch_train_loss = eval_model_loss(model, mse_eval, True ,'train')
@@ -77,11 +78,12 @@ class Trainer:
                 else:
                     plt.plot(self.train_losses)
                 plt.show()
+                self.model.train()
 
     def set_learning_rate(self, learning_rate):
         for g in self.optimizer.param_groups:
             g['lr'] = learning_rate
 
     def reset_optimizer(self, lr=1e-1):
-        self.optimizer = torch.optim.Adam(ae.parameters(), lr=lr)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
 
