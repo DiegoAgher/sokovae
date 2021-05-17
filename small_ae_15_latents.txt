@@ -1,0 +1,6 @@
+std small ae with latent size 15, zero penalization, one layout with most configs.
+
+                  Included ~50 epochs of 'both' loss, decay of learning rate.
+
+                  Total of ~ 100 epochs of training
+              0.63217830657958980.026970908045768738
