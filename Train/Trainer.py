@@ -11,6 +11,23 @@ def show_img(img_tensor):
     plt.imshow(denormed_img.detach().numpy().transpose(1, 2, 0))
     plt.show()
 
+def eval_model_loss(model, loss_fn, loader, show=False):
+    model.eval()
+    eval_losses = []
+
+    for batch_idx, (state, action, next_state) in enumerate(loader):
+        encoded = model.encoder(state)
+        decoded = model.decoder(encoded)
+        if batch_idx == 0 and show:
+          show_img(state)
+          show_img(decoded)
+        batch_loss = loss_fn(decoded, state)
+
+        eval_losses.append(batch_loss) 
+
+    return sum(eval_losses) / len(eval_losses)
+
+
 class Trainer:
     def __init__(self, model,train_loader, eval_loader=None):
         self.model = model
@@ -58,14 +75,14 @@ class Trainer:
                 self.model.eval()
                 mse_eval = torch.nn.MSELoss()
                 if loss_function == 'both':
-                  epoch_train_loss = eval_model_loss(model, mse_eval, True ,'train')
+                  epoch_train_loss = eval_model_loss(self.model, mse_eval, loader)
                   if not self.only_train:
-                      epoch_eval_loss = eval_model_loss(model, mse_eval, True, 'eval')
+                      epoch_eval_loss = eval_model_loss(self.model, mse_eval, loader)
                   small_obj = make_small_objects_important(state_hat, state)
                 else:
-                  epoch_train_loss = eval_model_loss(model, loss_function, True ,'train')
+                  epoch_train_loss = eval_model_loss(self.model, loss_function, loader)
                   if not self.only_train:
-                      epoch_eval_loss = eval_model_loss(model, loss_function, True, 'eval')
+                      epoch_eval_loss = eval_model_loss(self.model, loss_function, loader) 
 
                 _, (state, action, next_state) = next(enumerate(self.loader))
                 show_img(state)
