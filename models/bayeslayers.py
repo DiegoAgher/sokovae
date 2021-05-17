@@ -2,6 +2,12 @@ import torch
 from torch import nn
 
 
+def sample_reparam(mu, log_var):
+    std = torch.exp(0.5 * log_var)
+    eps = torch.randn_like(std)
+    sample = mu + (eps * std)
+    return sample
+
 class BayesianLayer(torch.nn.Module):
     '''
     Module implementing a single Bayesian feedforward layer.
