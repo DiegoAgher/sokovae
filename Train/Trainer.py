@@ -56,7 +56,7 @@ class Trainer:
             if (batch_idx % 100 == 0):
                 displ.clear_output()
                 self.model.eval()
-                mse_eval = nn.MSELoss()
+                mse_eval = torch.nn.MSELoss()
                 if loss_function == 'both':
                   epoch_train_loss = eval_model_loss(model, mse_eval, True ,'train')
                   if not self.only_train:
