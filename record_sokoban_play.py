@@ -86,7 +86,10 @@ for i_episode in range(n_rounds):
 
         except ValueError:
             print_available_actions()
+            if action == 99:
+                break
             continue
+
  
         scaled.append(curr_resized)
         actions.append(action)
