@@ -3,6 +3,7 @@ import torchvision
 import matplotlib.pyplot as plt
 from IPython import display as displ
 
+from loss_functions import make_small_objects_important
 
 means = torch.tensor([0.5, 0.5, 0.5], dtype=torch.float32)
 stds = torch.tensor([0.5, 0.5, 0.5], dtype=torch.float32)
