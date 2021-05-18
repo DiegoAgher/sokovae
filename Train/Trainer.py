@@ -100,6 +100,8 @@ class Trainer:
                 show_img(state_hat.detach())
 
                 self.train_losses.append(epoch_train_loss.item())
+                print("batch {}, epoch {}, loss {}".format(batch_idx, epoch_id,
+                                                           epoch_train_loss)
 
                 if self.train_losses[0] / self.train_losses[-1] > 1.75:
                     plt.plot(self.train_losses[-45:])
