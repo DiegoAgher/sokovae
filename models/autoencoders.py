@@ -388,3 +388,91 @@ class CondCnnAE(torch.nn.Module):
                 kl += kl_
         return kl
 
+class SmallEncoder40(BaseVariational):
+    '''
+    Takes in as input batches of images of size [batch_size, 40, 40, 3]
+    '''
+    def __init__(self, latent_size=9):
+        super().__init__()
+        self.latent_size = latent_size
+        self.layers = torch.nn.ModuleList(self._init_layers())
+
+    def _init_layers(self):
+        layers = [
+                Conv2d(in_channels=3, out_channels=16,
+                      kernel_size=3, stride=2, padding=1),
+                BatchNorm2d(16),
+                ReLU(),
+                #Dropout2d(p=0.25),
+                Conv2d(in_channels=16, out_channels=32,
+                          kernel_size=3, stride=2, padding=1),
+                BatchNorm2d(32),
+                ReLU(),
+                #Dropout2d(p=0.25),
+                Conv2d(in_channels=32, out_channels=64,
+                          kernel_size=3, stride=2, padding=1),
+                BatchNorm2d(64),
+                ReLU(),
+                Flatten(),
+                Dropout(p=0.4),
+                Linear(1600, int(1600 / 9)),
+                ReLU(),
+                Dropout(p=0.4),
+                BayesianLayer(int(1600 / 9), self.latent_size)]
+        return layers
+
+
+class SmallDecoder40(BaseVariational):
+    '''
+    Use with SmallEncoder40.
+    will take a Dense vector and turn it into batches of size [batch_size, 40, 40, 3]
+    '''
+    def __init__(self, latent_size):
+        super().__init__()
+        self.latent_size = latent_size
+        self.layers = torch.nn.ModuleList(self._init_layers())
+
+    def _init_layers(self):
+        self.start_decode = Linear(self.latent_size, int(1600 / 9))
+        self.drop_linear_one = Dropout(p=0.4)
+        self.start_decodeb = Linear(int(1600 / 9), 1600)
+        self.drop_linear_two = Dropout(p=0.4)
+        layers = [
+                ConvTranspose2d(in_channels=64, out_channels=32,
+                          kernel_size=3, stride=3, padding=3),
+                BatchNorm2d(32),
+                Dropout2d(p=0.25),
+                ReLU(),
+                ConvTranspose2d(in_channels=32, out_channels=16,
+                          kernel_size=3, stride=3, padding=3),
+                BatchNorm2d(16),
+                Dropout2d(p=0.25),
+                ReLU(),
+                ConvTranspose2d(in_channels=16, out_channels=8,
+                          kernel_size=3, stride=2, padding=1, output_padding=1),
+                BatchNorm2d(8),
+                Dropout2d(p=0.25),
+                ReLU(),   
+                Conv2d(in_channels=8, out_channels=3,
+                          kernel_size=3, stride=1, padding=0),
+                Tanh()    
+            ]
+        return layers
+    
+    def forward(self, x, debug=False):
+        x = self.start_decode(x)
+        x = self.drop_linear_one(x)
+        x = F.relu(x)
+        x = self.start_decodeb(x)
+        x = self.drop_linear_two(x)
+        x = F.relu(x)
+        x = x.reshape(-1, 64, 5, 5)
+
+        for idx, layer in enumerate(self.layers):
+            x = layer(x)
+            if debug:
+                print("layer {}".format(layer))
+                print("shape {}".format(x.shape))
+                print("")
+        return x
+
