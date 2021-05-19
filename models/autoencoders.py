@@ -220,22 +220,6 @@ class EncoderSmall(BaseVariational):
                 BayesianLayer(int(9216 / 9), self.latent_size)]
         return layers
 
-    def forward(self, x, debug=False):
-        x = self.start_decode(x)
-        x = self.drop_linear_one(x)
-        x = F.relu(x)
-        x = self.start_decodeb(x)
-        x = self.drop_linear_two(x)
-        x = F.relu(x)
-        x = x.reshape(-1, 1024, 3, 3)
-
-        for idx, layer in enumerate(self.layers):
-            x = layer(x)
-            if debug:
-                print("layer {}".format(layer))
-                print("shape {}".format(x.shape))
-                print("")
-        return x
 
 class DecoderSmall(BaseVariational):
     '''
@@ -291,6 +275,22 @@ class DecoderSmall(BaseVariational):
             ]
         return layers
 
+    def forward(self, x, debug=False):
+        x = self.start_decode(x)
+        x = self.drop_linear_one(x)
+        x = F.relu(x)
+        x = self.start_decodeb(x)
+        x = self.drop_linear_two(x)
+        x = F.relu(x)
+        x = x.reshape(-1, 1024, 3, 3)
+
+        for idx, layer in enumerate(self.layers):
+            x = layer(x)
+            if debug:
+                print("layer {}".format(layer))
+                print("shape {}".format(x.shape))
+                print("")
+        return x
 
 class CnnAE(torch.nn.Module):
     def __init__(self, encoder, decoder):
