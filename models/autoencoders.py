@@ -427,7 +427,6 @@ class SmallEncoder40(BaseVariational):
                 BayesianLayer(int(flat_size / 9), self.latent_size)]
         )
         return layers
-
 class SmallDecoder40(BaseVariational):
     '''
     Use with SmallEncoder40.
@@ -441,9 +440,10 @@ class SmallDecoder40(BaseVariational):
         self.layers = torch.nn.ModuleList(self._init_layers())
 
     def _init_layers(self):
-        self.start_decode = Linear(self.latent_size, int(1600 / 9))
+        flat_size = self.layers_dims[0] * 5 * 5
+        self.start_decode = Linear(self.latent_size, int(flat_size / 9))
         self.drop_linear_one = Dropout(p=0.4)
-        self.start_decodeb = Linear(int(1600 / 9), 1600)
+        self.start_decodeb = Linear(int(flat_size / 9), flat_size)
         self.drop_linear_two = Dropout(p=0.4)
 
         stride = 3
