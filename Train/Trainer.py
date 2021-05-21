@@ -61,8 +61,9 @@ class Trainer:
         for batch_idx, (state, action, next_state) in enumerate(loader):
             self.optimizer.zero_grad()
             if debug_zeros:
-                state = torch.zeros_like(state)
-            z = self.model.encoder(state)
+                z = self.model.encoder(torch.zeros_like(state))
+            else:
+                z = self.model.encoder(state)
             state_hat = self.model.decoder(z)
             if loss_function == 'both':
               recon_loss_x = mse(state_hat, state)
