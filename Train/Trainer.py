@@ -49,7 +49,8 @@ class Trainer:
         self.train_losses = []
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-3)
 
-    def train_one_epoch(self, penalization, epoch_id, loss_function):
+    def train_one_epoch(self, penalization, epoch_id, loss_function,
+                        debug_zeros=False):
         self.model.train()
 
         mse = torch.nn.MSELoss()
@@ -59,7 +60,8 @@ class Trainer:
         loader = self.train_loader
         for batch_idx, (state, action, next_state) in enumerate(loader):
             self.optimizer.zero_grad()
-
+            if debug_zeros:
+                state = torch.zeros_like(state)
             z = self.model.encoder(state)
             state_hat = self.model.decoder(z)
             if loss_function == 'both':
