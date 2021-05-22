@@ -27,7 +27,7 @@ class BaseVariational(torch.nn.Module):
             pred += self.forward(x)
         pred = pred / num_forward_passes
 
-        return latent
+        return pred
    
     def kl_loss(self):
         '''
