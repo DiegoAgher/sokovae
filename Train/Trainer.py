@@ -73,7 +73,7 @@ class Trainer:
             self.optimizer.zero_grad()
             if debug_zeros:
                 z = self.model.encoder(torch.zeros_like(state))
-            elif model.encoder.non_variational:
+            elif self.model.encoder.non_variational:
                 z = self.model.encoder(state)
             else:
                 z, mu, logvar = self.model.encoder(state)
