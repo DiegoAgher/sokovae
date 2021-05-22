@@ -422,7 +422,7 @@ class SmallEncoder40(BaseVariational):
         flat_size = self.layers_dims[-1] * 5 * 5
         layers.extend([
                 Flatten(),
-                Dropout(p=0.25),
+                #Dropout(p=0.25),
                 Linear(flat_size, int(flat_size / 9)),
                 ReLU(),
                 #Dropout(p=0.4),
@@ -434,6 +434,7 @@ class SmallEncoder40(BaseVariational):
             layers.append(BayesianLayer(int(flat_size/9), self.latent_size))
             
         return layers
+
 class SmallDecoder40(BaseVariational):
     '''
     Use with SmallEncoder40.
@@ -473,7 +474,7 @@ class SmallDecoder40(BaseVariational):
 
             layers.extend(
                 [
-                Dropout2d(p=0.1),
+                #tDropout2d(p=0.1),
                 ConvTranspose2d(in_channels=current_dims,
                                  out_channels=next_dims,
                                  kernel_size=3, stride=stride, padding=padding,
@@ -491,10 +492,10 @@ class SmallDecoder40(BaseVariational):
         return layers
     
     def forward(self, x, debug=False):
-        x = self.drop_linear_one(x)
+        #x = self.drop_linear_one(x)
         x = self.start_decode(x)
         x = F.relu(x)
-        x = self.drop_linear_two(x)
+        #x = self.drop_linear_two(x)
         x = self.start_decodeb(x)
         x = F.relu(x)
         
