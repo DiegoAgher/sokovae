@@ -41,11 +41,19 @@ def eval_model_loss(model, loss_fn, loader, show=False):
 
 
 class Trainer:
-    def __init__(self, model,train_loader, eval_loader=None):
+    def __init__(self, model,train_loader, eval_loader=None
+                M_N=None):
         self.model = model
         self.train_loader = train_loader
         self.eval_loader = eval_loader
         self.only_train = True if eval_loader is None else False
+        if M_N is None:
+            sample_batch = _, (state, action, next_state) = next(
+                                                             enumerate(self.train_loader)
+                                                             )
+            sample_batch = state
+            M_N = state.shape[0] / len(self.train_loader) 
+        self.M_N = M_N 
         self.train_losses = []
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-3)
 
@@ -76,7 +84,7 @@ class Trainer:
             if penalization > 0.0:
                 kl_loss = M_N * penalization * self.model.kl_loss()
                 loss_new = kl_loss + loss
-                if use_action:
+                if False: # use_action:
                   action_kl = M_N * penalization * action_enc[4].kl_divergence()
                   loss_new += action_kl
             else:
