@@ -29,6 +29,8 @@ def eval_model_loss(model, loss_fn, loader, show=False):
 
     for batch_idx, (state, action, next_state) in enumerate(loader):
         encoded = model.encoder(state)
+        if not model.non_variational:
+            encoded, mu, logvar = model.encoder(state)
         decoded = model.decoder(encoded)
         if batch_idx == 0 and show:
           show_img(state)
@@ -70,8 +72,10 @@ class Trainer:
             self.optimizer.zero_grad()
             if debug_zeros:
                 z = self.model.encoder(torch.zeros_like(state))
-            else:
+            elif model.non_variational:
                 z = self.model.encoder(state)
+            else:
+                z, mu, logvar = self.model.encoder(state)
             state_hat = self.model.decoder(z)
             if loss_function == 'both':
               recon_loss_x = mse(state_hat, state)
@@ -82,7 +86,8 @@ class Trainer:
               loss = loss_recon_x
 
             if penalization > 0.0:
-                kl_loss = self.M_N * penalization * self.model.kl_loss()
+                kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+                kl_loss *= self.M_N * penalization
                 loss_new = kl_loss + loss
                 if False: # use_action:
                   action_kl = self.M_N * penalization * action_enc[4].kl_divergence()
