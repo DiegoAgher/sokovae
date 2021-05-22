@@ -105,17 +105,18 @@ class Trainer:
                 mse_eval = torch.nn.MSELoss()
                 if loss_function == 'both':
                   epoch_train_loss = eval_model_loss(self.model, mse_eval, loader,
-                                                     non_variational=ae.encoder.non_variational)
+                                        non_variational=self.model.encoder.non_variational)
                   if not self.only_train:
                       epoch_eval_loss = eval_model_loss(self.model, mse_eval, loader,
-                                                     non_variational=ae.encoder.non_variational)
+                                        non_variational=self.model.encoder.non_variational)
                   small_obj = make_small_objects_important(state_hat, state)
                 else:
                   epoch_train_loss = eval_model_loss(self.model, loss_function, loader,
-                                        non_variational=ae.encoder.non_variational)
+                                        non_variational=self.model.encoder.non_variational)
                   if not self.only_train:
                       epoch_eval_loss = eval_model_loss(self.model, loss_function,
-                                            loader, non_variational=ae.encoder.non_variational) 
+                                            loader,
+                                            non_variational=self.model.encoder.non_variational) 
 
                 _, (state, action, next_state) = next(enumerate(loader))
                 show_img(state)
