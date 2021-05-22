@@ -82,10 +82,10 @@ class Trainer:
               loss = loss_recon_x
 
             if penalization > 0.0:
-                kl_loss = M_N * penalization * self.model.kl_loss()
+                kl_loss = self.M_N * penalization * self.model.kl_loss()
                 loss_new = kl_loss + loss
                 if False: # use_action:
-                  action_kl = M_N * penalization * action_enc[4].kl_divergence()
+                  action_kl = self.M_N * penalization * action_enc[4].kl_divergence()
                   loss_new += action_kl
             else:
                 loss_new = loss
