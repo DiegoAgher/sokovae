@@ -23,13 +23,14 @@ def show_img(img_tensor):
     plt.imshow(denormed_img.detach().numpy().transpose(1, 2, 0))
     plt.show()
 
-def eval_model_loss(model, loss_fn, loader, show=False):
+def eval_model_loss(model, loss_fn, loader,
+                    non_variational=False, show=False):
     model.eval()
     eval_losses = []
 
     for batch_idx, (state, action, next_state) in enumerate(loader):
         encoded = model.encoder(state)
-        if not model.non_variational:
+        if not non_variational:
             encoded, mu, logvar = model.encoder(state)
         decoded = model.decoder(encoded)
         if batch_idx == 0 and show:
@@ -103,14 +104,18 @@ class Trainer:
                 self.model.eval()
                 mse_eval = torch.nn.MSELoss()
                 if loss_function == 'both':
-                  epoch_train_loss = eval_model_loss(self.model, mse_eval, loader)
+                  epoch_train_loss = eval_model_loss(self.model, mse_eval, loader,
+                                                     non_variational=ae.encoder.non_variational)
                   if not self.only_train:
-                      epoch_eval_loss = eval_model_loss(self.model, mse_eval, loader)
+                      epoch_eval_loss = eval_model_loss(self.model, mse_eval, loader,
+                                                     non_variational=ae.encoder.non_variational)
                   small_obj = make_small_objects_important(state_hat, state)
                 else:
-                  epoch_train_loss = eval_model_loss(self.model, loss_function, loader)
+                  epoch_train_loss = eval_model_loss(self.model, loss_function, loader,
+                                        non_variational=ae.encoder.non_variational)
                   if not self.only_train:
-                      epoch_eval_loss = eval_model_loss(self.model, loss_function, loader) 
+                      epoch_eval_loss = eval_model_loss(self.model, loss_function,
+                                            loader, non_variational=ae.encoder.non_variational) 
 
                 _, (state, action, next_state) = next(enumerate(loader))
                 show_img(state)
