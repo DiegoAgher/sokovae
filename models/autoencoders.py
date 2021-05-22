@@ -6,6 +6,17 @@ from torch.nn import BatchNorm2d, Dropout, Dropout2d, Flatten
 
 from .bayeslayers import BayesianLayer
 
+def reparameterize(mu, log_var):
+    """
+    :param mu: mean from the encoder's latent space
+    :param log_var: log variance from the encoder's latent space
+    """
+    std = torch.exp(0.5*log_var) # standard deviation
+    eps = torch.randn_like(std) # `randn_like` as we need the same size
+    sample = mu + (eps * std) # sampling as if coming from the input space
+    return sample
+
+
 class BaseVariational(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -292,6 +303,153 @@ class DecoderSmall(BaseVariational):
                 print("")
         return x
 
+
+class SmallEncoder40(BaseVariational):
+    '''
+    Takes in as input batches of images of size [batch_size, 40, 40, 3]
+    '''
+    def __init__(self, latent_size, layers_dims, activation='relu',
+                non_variational=False):
+        super().__init__()
+        self.latent_size = latent_size
+        self.layers_dims = layers_dims
+        self.activation = LeakyReLU if activation is not 'relu' else ReLU
+        self.non_variational = non_variational
+        self.layers = torch.nn.ModuleList(self._init_layers())
+
+    def _init_layers(self):
+        layers = []
+        for idx, dims in enumerate(self.layers_dims):
+            if idx == 0:
+                current_dims = 3
+                next_dims = dims
+            else:
+                current_dims = self.layers_dims[idx - 1]
+                next_dims = dims
+
+            layers.extend(
+                    [
+                    Conv2d(in_channels=current_dims, out_channels=next_dims,
+                           kernel_size=3, stride=2, padding=1),
+                    BatchNorm2d(next_dims),
+                    self.activation(),
+                    ])
+
+        self.flat_size = self.layers_dims[-1] * 5 * 5
+        layers.extend([
+                Flatten(),
+                #Dropout(p=0.25),
+                Linear(self.flat_size, int(self.flat_size / 9)),
+                ReLU(),
+                #Dropout(p=0.4),
+                ]
+            )
+        if self.non_variational:
+            layers.append(Linear(int(self.flat_size/9), self.latent_size))
+        else:
+            self.init_gaussian_params(int(self.flat_size/9))
+ 
+        return layers
+    
+    def init_gaussian_params(self, out_size):
+        self.model_mu = Linear(out_size, self.latent_size)
+        self.model_logvar = Linear(out_size, self.latent_size)
+
+    def forward(self, x, debug=False):
+        for layer in self.layers:
+            x = layer(x)
+            # if isinstance(layer, nn.Flatten):
+            #     print(x.shape)
+            if debug:
+                print("layer {}".format(layer))
+                print("shape {}".format(x.shape))
+                print("")
+        if self.non_variational:
+            return x
+
+        mu = self.model_mu(x)
+        logvar = self.model_logvar(x)
+        z = reparametrize(mu, logvar)
+
+        return z, mu, logvar
+
+
+
+class SmallDecoder40(BaseVariational):
+    '''
+    Use with SmallEncoder40.
+    will take a Dense vector and turn it into batches of size [batch_size, 40, 40, 3]
+    '''
+    def __init__(self, latent_size, layers_dims, activation='relu'):
+        super().__init__()
+        self.latent_size = latent_size
+        self.layers_dims = layers_dims
+        self.activation = LeakyReLU if activation is not 'relu' else ReLU
+        self.layers = torch.nn.ModuleList(self._init_layers())
+
+    def _init_layers(self):
+        flat_size = self.layers_dims[0] * 5 * 5
+        self.start_decode = Linear(self.latent_size, int(flat_size / 9))
+        self.drop_linear_one = Dropout(p=0.4)
+        self.start_decodeb = Linear(int(flat_size / 9), flat_size)
+        self.drop_linear_two = Dropout(p=0.4)
+
+        stride = 3
+        padding = 3
+        output_padding = 0
+        layers = []
+        for idx, dims in enumerate(self.layers_dims):
+
+            if idx == 2:
+                current_dims = dims
+                next_dims = 8
+            else:
+                current_dims = dims
+                next_dims = self.layers_dims[idx + 1]
+
+            if idx == 2:
+                stride = 2
+                padding = 1
+                output_padding = 1
+
+            layers.extend(
+                [
+                #tDropout2d(p=0.1),
+                ConvTranspose2d(in_channels=current_dims,
+                                 out_channels=next_dims,
+                                 kernel_size=3, stride=stride, padding=padding,
+                                 output_padding=output_padding),
+                BatchNorm2d(next_dims),
+                self.activation()
+                ]
+              )
+
+        layers.extend(
+                [Conv2d(in_channels=8, out_channels=3,
+                        kernel_size=3, stride=1, padding=0),
+                 Tanh()]
+                    )
+        return layers
+    
+    def forward(self, x, debug=False):
+        #x = self.drop_linear_one(x)
+        x = self.start_decode(x)
+        x = F.relu(x)
+        #x = self.drop_linear_two(x)
+        x = self.start_decodeb(x)
+        x = F.relu(x)
+        
+        init_channels = self.layers_dims[0]
+        x = x.reshape(-1, init_channels, 5, 5)
+
+        for idx, layer in enumerate(self.layers):
+            x = layer(x)
+            if debug:
+                print("layer {}".format(layer))
+                print("shape {}".format(x.shape))
+                print("")
+        return x
+
 class CnnAE(torch.nn.Module):
     def __init__(self, encoder, decoder):
         super().__init__()
@@ -387,125 +545,3 @@ class CondCnnAE(torch.nn.Module):
                 kl_ = layer.kl_divergence()
                 kl += kl_
         return kl
-
-class SmallEncoder40(BaseVariational):
-    '''
-    Takes in as input batches of images of size [batch_size, 40, 40, 3]
-    '''
-    def __init__(self, latent_size, layers_dims, activation='relu',
-                non_variational=False):
-        super().__init__()
-        self.latent_size = latent_size
-        self.layers_dims = layers_dims
-        self.activation = LeakyReLU if activation is not 'relu' else ReLU
-        self.non_variational = non_variational
-        self.layers = torch.nn.ModuleList(self._init_layers())
-
-    def _init_layers(self):
-        layers = []
-        for idx, dims in enumerate(self.layers_dims):
-            if idx == 0:
-                current_dims = 3
-                next_dims = dims
-            else:
-                current_dims = self.layers_dims[idx - 1]
-                next_dims = dims
-
-            layers.extend(
-                    [
-                    Conv2d(in_channels=current_dims, out_channels=next_dims,
-                           kernel_size=3, stride=2, padding=1),
-                    BatchNorm2d(next_dims),
-                    self.activation(),
-                    ])
-
-        flat_size = self.layers_dims[-1] * 5 * 5
-        layers.extend([
-                Flatten(),
-                #Dropout(p=0.25),
-                Linear(flat_size, int(flat_size / 9)),
-                ReLU(),
-                #Dropout(p=0.4),
-                ]
-            )
-        if self.non_variational:
-            layers.append(Linear(int(flat_size/9), self.latent_size))
-        else:
-            layers.append(BayesianLayer(int(flat_size/9), self.latent_size))
-            
-        return layers
-
-class SmallDecoder40(BaseVariational):
-    '''
-    Use with SmallEncoder40.
-    will take a Dense vector and turn it into batches of size [batch_size, 40, 40, 3]
-    '''
-    def __init__(self, latent_size, layers_dims, activation='relu'):
-        super().__init__()
-        self.latent_size = latent_size
-        self.layers_dims = layers_dims
-        self.activation = LeakyReLU if activation is not 'relu' else ReLU
-        self.layers = torch.nn.ModuleList(self._init_layers())
-
-    def _init_layers(self):
-        flat_size = self.layers_dims[0] * 5 * 5
-        self.start_decode = Linear(self.latent_size, int(flat_size / 9))
-        self.drop_linear_one = Dropout(p=0.4)
-        self.start_decodeb = Linear(int(flat_size / 9), flat_size)
-        self.drop_linear_two = Dropout(p=0.4)
-
-        stride = 3
-        padding = 3
-        output_padding = 0
-        layers = []
-        for idx, dims in enumerate(self.layers_dims):
-
-            if idx == 2:
-                current_dims = dims
-                next_dims = 8
-            else:
-                current_dims = dims
-                next_dims = self.layers_dims[idx + 1]
-
-            if idx == 2:
-                stride = 2
-                padding = 1
-                output_padding = 1
-
-            layers.extend(
-                [
-                #tDropout2d(p=0.1),
-                ConvTranspose2d(in_channels=current_dims,
-                                 out_channels=next_dims,
-                                 kernel_size=3, stride=stride, padding=padding,
-                                 output_padding=output_padding),
-                BatchNorm2d(next_dims),
-                self.activation()
-                ]
-              )
-
-        layers.extend(
-                [Conv2d(in_channels=8, out_channels=3,
-                        kernel_size=3, stride=1, padding=0),
-                 Tanh()]
-                    )
-        return layers
-    
-    def forward(self, x, debug=False):
-        #x = self.drop_linear_one(x)
-        x = self.start_decode(x)
-        x = F.relu(x)
-        #x = self.drop_linear_two(x)
-        x = self.start_decodeb(x)
-        x = F.relu(x)
-        
-        init_channels = self.layers_dims[0]
-        x = x.reshape(-1, init_channels, 5, 5)
-
-        for idx, layer in enumerate(self.layers):
-            x = layer(x)
-            if debug:
-                print("layer {}".format(layer))
-                print("shape {}".format(x.shape))
-                print("")
-        return x
