@@ -392,11 +392,13 @@ class SmallEncoder40(BaseVariational):
     '''
     Takes in as input batches of images of size [batch_size, 40, 40, 3]
     '''
-    def __init__(self, latent_size, layers_dims, activation='relu'):
+    def __init__(self, latent_size, layers_dims, activation='relu',
+                non_variational=False):
         super().__init__()
         self.latent_size = latent_size
         self.layers_dims = layers_dims
         self.activation = LeakyReLU if activation is not 'relu' else ReLU
+        self.non_variational = non_variational
         self.layers = torch.nn.ModuleList(self._init_layers())
 
     def _init_layers(self):
@@ -424,8 +426,13 @@ class SmallEncoder40(BaseVariational):
                 Linear(flat_size, int(flat_size / 9)),
                 ReLU(),
                 #Dropout(p=0.4),
-                BayesianLayer(int(flat_size / 9), self.latent_size)]
-        )
+                ]
+            )
+        if self.non_variational:
+            layers.append(Linear(int(flat_size/9), self.latent_size))
+        else:
+            layers.append(BayesianLayer(int(flat_size/9), self.latent_size))
+            
         return layers
 class SmallDecoder40(BaseVariational):
     '''
