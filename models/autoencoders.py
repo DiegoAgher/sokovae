@@ -6,7 +6,7 @@ from torch.nn import BatchNorm2d, Dropout, Dropout2d, Flatten
 
 from .bayeslayers import BayesianLayer
 
-def reparameterize(mu, log_var):
+def reparametrize(mu, log_var):
     """
     :param mu: mean from the encoder's latent space
     :param log_var: log variance from the encoder's latent space
