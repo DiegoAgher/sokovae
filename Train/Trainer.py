@@ -41,7 +41,7 @@ def eval_model_loss(model, loss_fn, loader, show=False):
 
 
 class Trainer:
-    def __init__(self, model,train_loader, eval_loader=None
+    def __init__(self, model,train_loader, eval_loader=None,
                 M_N=None):
         self.model = model
         self.train_loader = train_loader
