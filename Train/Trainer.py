@@ -62,7 +62,7 @@ class Trainer:
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-3)
 
     def train_one_epoch(self, penalization, epoch_id, loss_function,
-                        debug_zeros=False, plot_kl=False):
+                        debug_zeros=False, plot_kl=False, mean_train=False):
         self.model.train()
 
         mse = torch.nn.MSELoss()
@@ -72,13 +72,21 @@ class Trainer:
         loader = self.train_loader
         for batch_idx, (state, action, next_state) in enumerate(loader):
             self.optimizer.zero_grad()
+
             if debug_zeros:
                 z = self.model.encoder(torch.zeros_like(state))
             elif self.model.encoder.non_variational:
                 z = self.model.encoder(state)
             else:
                 z, mu, logvar = self.model.encoder(state)
+                if mean_train:
+                    for i in range(9):
+                        curr_z, _, _ = ae.encoder(state)
+                        z += curr_z
+                    z = z / 10
+
             state_hat = self.model.decoder(z)
+
             if loss_function == 'both':
               recon_loss_x = mse(state_hat, state)
               small_obj = make_small_objects_important(state_hat, state)
