@@ -62,7 +62,7 @@ class Trainer:
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-3)
 
     def train_one_epoch(self, penalization, epoch_id, loss_function,
-                        debug_zeros=False):
+                        debug_zeros=False, plot_kl=False):
         self.model.train()
 
         mse = torch.nn.MSELoss()
@@ -133,12 +133,13 @@ class Trainer:
                 else:
                     plt.plot(self.train_losses)
                 plt.show()
-                if self.kl_losses[0] / self.kl_losses[-1] > 1.75:
-                    plt.plot(self.kl_losses[-45:])
-                else:
-                    plt.plot(self.kl_losses)
-                plt.show()
-                plt.pause(0.5)
+                if plot_kl:
+                    if self.kl_losses[0] / self.kl_losses[-1] > 1.75:
+                        plt.plot(self.kl_losses[-45:])
+                    else:
+                        plt.plot(self.kl_losses)
+                    plt.show()
+                plt.pause(1)
                 self.model.train()
 
     def set_learning_rate(self, learning_rate):
