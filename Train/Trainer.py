@@ -58,6 +58,7 @@ class Trainer:
             M_N = state.shape[0] / len(self.train_loader) 
         self.M_N = M_N 
         self.train_losses = []
+        self.kl_losses = []
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-3)
 
     def train_one_epoch(self, penalization, epoch_id, loss_function,
@@ -89,6 +90,7 @@ class Trainer:
             if penalization > 0.0:
                 kl_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
                 kl_loss *= self.M_N * penalization
+                self.kl_losses.append(kl_loss)
                 loss_new = kl_loss + loss
                 if False: # use_action:
                   action_kl = self.M_N * penalization * action_enc[4].kl_divergence()
@@ -131,6 +133,12 @@ class Trainer:
                 else:
                     plt.plot(self.train_losses)
                 plt.show()
+                if self.kl_losses[0] / self.kl_losses[-1] > 1.75:
+                    plt.plot(self.kl_losses[-45:])
+                else:
+                    plt.plot(self.kl_losses)
+                plt.show()
+                plt.pause(0.5)
                 self.model.train()
 
     def set_learning_rate(self, learning_rate):
