@@ -1,3 +1,5 @@
+import os
+import imageio
 import torch
 import torchvision
 import matplotlib.pyplot as plt
@@ -59,10 +61,12 @@ class Trainer:
         self.M_N = M_N 
         self.train_losses = []
         self.kl_losses = []
+        self.filenames = []
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=3e-3)
 
     def train_one_epoch(self, penalization, epoch_id, loss_function,
-                        debug_zeros=False, plot_kl=False, mean_train=False):
+                        debug_zeros=False, plot_kl=False, mean_train=False,
+                        with_gif=False):
         self.model.train()
 
         mse = torch.nn.MSELoss()
@@ -131,6 +135,11 @@ class Trainer:
                 _, (state, action, next_state) = next(enumerate(loader))
                 show_img(state)
                 show_img(state_hat.detach())
+                denormed_img = denormalize(state_hat[0])
+                plt.imshow(denormed_img.detach().numpy().transpose(1, 2, 0))
+                filename = '{}_.png'.format(idx)
+                self.filenames.append(filename)
+                plt.savefig(filename, bbox_inches='tight')
 
                 self.train_losses.append(epoch_train_loss.item())
                 print("batch {}, epoch {}, loss {}".format(batch_idx, epoch_id,
@@ -157,3 +166,19 @@ class Trainer:
     def reset_optimizer(self, lr=1e-1):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
 
+    def produce_gif(self, gif_filename=None, remove_files=True):
+        if gif_filename is None:
+            gif_filename = 'mygif.gif'
+        if not gif_filename.endswith('gif'):
+            gif_filename = gif_filename + '.gif'
+
+        with imageio.get_writer(gif_filename, mode='I') as writer:
+            for filename in filenames:
+                image = imageio.imread(filename)
+                writer.append_data(image)
+
+        if remove_files:
+            for filename in set(filenames):
+                os.remove(filename)
+        
+        return gif_filename
