@@ -81,7 +81,7 @@ class Trainer:
                 z, mu, logvar = self.model.encoder(state)
                 if mean_train:
                     for i in range(9):
-                        curr_z, _, _ = model.encoder(state)
+                        curr_z, _, _ = self.model.encoder(state)
                         z += curr_z
                     z = z / 10
 
