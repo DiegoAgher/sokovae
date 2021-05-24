@@ -137,7 +137,7 @@ class Trainer:
                 show_img(state_hat.detach())
                 denormed_img = denormalize(state_hat[0])
                 plt.imshow(denormed_img.detach().numpy().transpose(1, 2, 0))
-                filename = '{}_.png'.format(idx)
+                filename = '{}_.png'.format(epoch_id)
                 self.filenames.append(filename)
                 plt.savefig(filename, bbox_inches='tight')
 
