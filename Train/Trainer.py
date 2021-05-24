@@ -135,11 +135,6 @@ class Trainer:
                 _, (state, action, next_state) = next(enumerate(loader))
                 show_img(state)
                 show_img(state_hat.detach())
-                denormed_img = denormalize(state_hat[0])
-                plt.imshow(denormed_img.detach().numpy().transpose(1, 2, 0))
-                filename = '{}_.png'.format(epoch_id)
-                self.filenames.append(filename)
-                plt.savefig(filename, bbox_inches='tight')
 
                 self.train_losses.append(epoch_train_loss.item())
                 print("batch {}, epoch {}, loss {}".format(batch_idx, epoch_id,
@@ -157,6 +152,11 @@ class Trainer:
                         plt.plot(self.kl_losses)
                     plt.show()
                 plt.pause(1)
+                denormed_img = denormalize(state_hat[0])
+                plt.imshow(denormed_img.detach().numpy().transpose(1, 2, 0))
+                filename = '{}_.png'.format(epoch_id)
+                self.filenames.append(filename)
+                plt.savefig(filename, bbox_inches='tight')
                 self.model.train()
 
     def set_learning_rate(self, learning_rate):
