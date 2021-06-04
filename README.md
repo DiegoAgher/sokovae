@@ -4,5 +4,6 @@
 Learn to see, learn to play
 
 
-## Latent traversal of a deterministic AE
+## Latent traversal of a VAE
 ![](traversing_latent_2scaledsoko.gif)
+![](traversing_latent_1scaledsoko.gif)
