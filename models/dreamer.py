@@ -12,8 +12,8 @@ from collections import namedtuple
 from itertools import count
 
 
-def new_state_encoded(z, action_model, action):
-    action_onehot = F.one_hot(action, num_classes=len(ACTION_LOOKUP)).type(torch.float)
+def new_state_encoded(z, action_model, action, num_classes):
+    action_onehot = F.one_hot(action, num_classes=num_classes).type(torch.float)
 
     cond_action = torch.cat([z, action_onehot], 1)
     encoded_action = action_model(cond_action)
@@ -26,6 +26,7 @@ class Dreamer(torch.nn.Module):
         super().__init__()
         self.gamma = gamma
         self.latent_size = latent_size
+        self.action_space_size = action_space_size
         self.encoder = encoder
         self.decoder = decoder
         self.reward_model = self.build_mlp(input_size=self.latent_size)
@@ -77,7 +78,8 @@ class Dreamer(torch.nn.Module):
                 
                 z, mu, logvar = self.encoder(state_t)
                 
-                encoded_next_state_hat = new_state_encoded(z, self.transition_model, action_t)
+                encoded_next_state_hat = new_state_encoded(z, self.transition_model,
+                                                          action_t, self.action_space_size)
                 next_state_hat = self.decoder(encoded_next_state_hat)
                 recon_loss = mse(next_state_hat, next_state_t)
 
@@ -207,7 +209,8 @@ class Dreamer(torch.nn.Module):
                         rollout_traj_rewards = torch.cat([rollout_traj_rewards, reward_t], 1)
                         rollout_traj_values = torch.cat([rollout_traj_values, value_t], 1)
 
-                    z = new_state_encoded(z, self.transition_model, action_hat)
+                    z = new_state_encoded(z, self.transition_model, action_hat,
+                                          self.action_space_size)
 
                 expanded_traj = torch.unsqueeze(rollout_traj_states, 1)
                 expanded_traj_actions = torch.unsqueeze(rollout_traj_actions, 1)
