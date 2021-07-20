@@ -16,7 +16,7 @@ from itertools import count
 from copy import deepcopy
 
 from .autoencoders import CnnAE
-from ..datasets import MyDatasetSeq
+from datasets import MyDatasetSeq
 
 
 means = torch.tensor([0.5, 0.5, 0.5], dtype=torch.float32)
