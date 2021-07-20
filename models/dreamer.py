@@ -18,7 +18,7 @@ def new_state_encoded(z, action_model, action, num_classes):
     action_onehot = F.one_hot(action, num_classes=num_classes).type(torch.float)
 
     cond_action = torch.cat([z, action_onehot], 1)
-    encoded_action = action_model(cond_action)
+    encoded_action = action_model(cond_action).type(torch.float)
     return z + encoded_action
 
 
