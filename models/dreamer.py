@@ -91,12 +91,12 @@ class Dreamer(torch.nn.Module):
                 loss.backward()
                 world_model_optim.step()
 
-    def train(self, states, actions, rewards, next_states, dones):
+    def train(self, epochs, states, actions, rewards, next_states, dones):
         replay_buffer = self.replay_buffer
         converged = False
 
         #while not converged:
-        for i_train in range(2):
+        for epoch in range(epochs):
             ## Dynamics learning
             self.train_world_model()
 
