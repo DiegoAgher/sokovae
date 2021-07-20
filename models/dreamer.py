@@ -111,14 +111,11 @@ class Dreamer(torch.nn.Module):
  
                 encoded_next_state_hat = torch.reshape(encoded_next_state_hat,
                                                        enc_next_state.shape)
-                print("enc_ {}".format(enc_next_state.shape))
-                print("encoded {}".format(encoded_next_state_hat.shape))
-
 
                 diff_embedding = close_embedding_beta * F.mse_loss(enc_next_state, encoded_next_state_hat)
 
                 loss = reward_loss + recon_loss + (diff_b * diff_embedding)
-                print("t {} Loss {}".format(t, loss.item()))
+                print("t {} WorldLoss {}".format(t, loss.item()))
 
                 loss.backward()
                 world_model_optim.step()
@@ -284,6 +281,7 @@ class Dreamer(torch.nn.Module):
         return estimated_values
     
     def compute_loss_and_update_parameters(self, imagined_rewards, imagined_values):
+        print("start of imagined optim")
         for t in range(self.L):
             print("t: {}".format(t))
             self.policy_optimizer.zero_grad()
