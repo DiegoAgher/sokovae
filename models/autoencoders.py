@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+import torch.optim as optim
 from torch.nn import Module, Linear
 from torch.nn import LeakyReLU, ReLU, Conv2d, ConvTranspose2d, Tanh
 from torch.nn import BatchNorm2d, Dropout, Dropout2d, Flatten
@@ -508,7 +509,6 @@ class CondCnnAE(torch.nn.Module):
 
     def predict(self, x, num_forward_passes=10):
 
-        # TODO: make n random forward passes
         encoded_x = self.encoder(x)
         encoded_action = self.action_encoder(action)
         encoded_blend = x + encoded_action
@@ -545,3 +545,7 @@ class CondCnnAE(torch.nn.Module):
                 kl_ = layer.kl_divergence()
                 kl += kl_
         return kl
+
+
+
+
