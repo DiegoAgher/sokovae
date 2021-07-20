@@ -1,4 +1,7 @@
+import numpy as np
+import cv2
 import torch
+import torchvision
 import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
@@ -10,10 +13,21 @@ from torch.distributions import Categorical
 
 from collections import namedtuple
 from itertools import count
+from copy import deepcopy
 
 from .autoencoders import CnnAE
+from ..datasets import MyDatasetSeq
 
 
+means = torch.tensor([0.5, 0.5, 0.5], dtype=torch.float32)
+stds = torch.tensor([0.5, 0.5, 0.5], dtype=torch.float32)
+to_tensor = torchvision.transforms.Compose([
+                                #torchvision.transforms.Resize(50, 50),
+                                torchvision.transforms.ToTensor(),
+                                torchvision.transforms.Normalize(
+                                                        mean=means,
+                                                        std=stds)
+                             ])
 def new_state_encoded(z, action_model, action, num_classes):
     action_onehot = F.one_hot(action, num_classes=num_classes).type(torch.float)
 
@@ -21,7 +35,7 @@ def new_state_encoded(z, action_model, action, num_classes):
     encoded_action = action_model(cond_action).type(torch.float)
     return z + encoded_action
 
-
+resize_ = 40
 class Dreamer(torch.nn.Module):
     def __init__(self, encoder, decoder, action_space_size, latent_size=11,
                  gamma=0.99, horizon=12, L=15, replay_buffer=None, lambda_=0.95):
@@ -76,7 +90,7 @@ class Dreamer(torch.nn.Module):
             for t in range(self.L):
                 state_t = state[:, t,:, :, :]
                 action_t = action[:, t]
-                reward_t = reward[:, t]
+                reward_t = reward[:, t].float()
                 next_state_t = next_state[:, t, :, :, :]
                 
                 z, mu, logvar = self.encoder(state_t)
@@ -93,6 +107,13 @@ class Dreamer(torch.nn.Module):
                 # remains to implement kl loss
                 # kl_loss = torch.distributions.kl.kl_divergence(z, next_state_hat)
                 enc_next_state, mu, logvar = self.encoder(next_state_t)
+                #enc_next_state = torch.flatten(enc_next_state)
+ 
+                encoded_next_state_hat = torch.reshape(encoded_next_state_hat,
+                                                       enc_next_state.shape)
+                print("enc_ {}".format(enc_next_state.shape))
+                print("encoded {}".format(encoded_next_state_hat.shape))
+
 
                 diff_embedding = close_embedding_beta * F.mse_loss(enc_next_state, encoded_next_state_hat)
 
@@ -102,7 +123,7 @@ class Dreamer(torch.nn.Module):
                 loss.backward()
                 world_model_optim.step()
 
-    def train(self, epochs, states, actions, rewards, next_states, dones):
+    def train(self, init_env, epochs, states, actions, rewards, next_states, dones):
         replay_buffer = self.replay_buffer
         converged = False
 
@@ -131,7 +152,7 @@ class Dreamer(torch.nn.Module):
             traj_next_states = []
             traj_dones = []
 
-            env = deepcopy(close_init_env)
+            env = deepcopy(init_env)
             obs = env.render('rgb_array')
             obs = cv2.resize(obs, dsize=(resize_, resize_))
             for t in range(self.L):
@@ -144,7 +165,7 @@ class Dreamer(torch.nn.Module):
                 #action = add_exploration_noise(action)
                 traj_actions.append(action)
 
-                obs, reward, done, _ = rl_env.step(action.item())
+                obs, reward, done, _ = env.step(action.item())
                 traj_rewards.append(reward)
 
                 obs = cv2.resize(obs, dsize=(resize_, resize_))
@@ -248,12 +269,12 @@ class Dreamer(torch.nn.Module):
             sum_= 0
             # sum in V_lambda (exp weighted)
             for n in range(1, self.H):
-                coeff = dreamer.lambda_ **(n - 1)
-                val = compute_v_k_N(rewards, values, n, tau)
+                coeff = self.lambda_ **(n - 1)
+                val = self.compute_v_k_N(rewards, values, n, tau)
                 sum_ += coeff * val
             sum_ *= (1 - self.lambda_)
-            coeff = self.lambda_ ** (dreamer.H - 1)
-            sum_ += coeff * compute_v_k_N(rewards, values, dreamer.H, tau)
+            coeff = self.lambda_ ** (self.H - 1)
+            sum_ += coeff * self.compute_v_k_N(rewards, values, self.H, tau)
             sum_expanded = torch.unsqueeze(sum_, 1)
 
             if tau == 1:
@@ -263,14 +284,14 @@ class Dreamer(torch.nn.Module):
         return estimated_values
     
     def compute_loss_and_update_parameters(self, imagined_rewards, imagined_values):
-        for t in range(dreamer.L):
+        for t in range(self.L):
             print("t: {}".format(t))
             self.policy_optimizer.zero_grad()
             self.critic_optimizer.zero_grad()
 
             rewards = imagined_rewards[:, t, :]
             values = imagined_values[:, t, :]
-            est_values = compute_Vlambda(rewards, values)
+            est_values = self.compute_Vlambda(rewards, values)
 
             policy_loss = -torch.sum(est_values)
             critic_loss = self.mse_loss(values, est_values)
