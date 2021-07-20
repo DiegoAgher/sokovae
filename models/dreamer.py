@@ -11,6 +11,8 @@ from torch.distributions import Categorical
 from collections import namedtuple
 from itertools import count
 
+from .autoencoders import CnnAE
+
 
 def new_state_encoded(z, action_model, action, num_classes):
     action_onehot = F.one_hot(action, num_classes=num_classes).type(torch.float)
@@ -29,6 +31,7 @@ class Dreamer(torch.nn.Module):
         self.action_space_size = action_space_size
         self.encoder = encoder
         self.decoder = decoder
+        self.ae = CnnAE(encoder, decoder)
         self.reward_model = self.build_mlp(input_size=self.latent_size)
         self.transition_model = self.build_mlp(input_size=self.latent_size + action_space_size, 
                                                output_size=latent_size)
@@ -89,7 +92,7 @@ class Dreamer(torch.nn.Module):
 
                 # remains to implement kl loss
                 # kl_loss = torch.distributions.kl.kl_divergence(z, next_state_hat)
-                enc_next_state, mu, logvar = ae.encoder(next_state_t)
+                enc_next_state, mu, logvar = self.encoder(next_state_t)
 
                 diff_embedding = close_embedding_beta * F.mse_loss(enc_next_state, encoded_next_state_hat)
 
