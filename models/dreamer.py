@@ -1,9 +1,15 @@
 import torch
 import torch.nn.functional as F
+import torch.nn as nn
 import torch.optim as optim
+
 from torch.nn import Module, Linear
 from torch.nn import LeakyReLU, ReLU, Conv2d, ConvTranspose2d, Tanh
 from torch.nn import BatchNorm2d, Dropout, Dropout2d, Flatten
+from torch.distributions import Categorical
+
+from collections import namedtuple
+from itertools import count
 
 
 def new_state_encoded(z, action_model, action):
