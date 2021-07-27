@@ -28,17 +28,18 @@ to_tensor = torchvision.transforms.Compose([
                                                         mean=means,
                                                         std=stds)
                              ])
-def new_state_encoded(z, action_model, action, num_classes):
-    action_onehot = F.one_hot(action, num_classes=num_classes).type(torch.float)
 
+resize_ = 40
+
+def new_state_encoded(z, action_model, action_onehot, num_classes):
     cond_action = torch.cat([z, action_onehot], 1)
     encoded_action = action_model(cond_action).type(torch.float)
     return z + encoded_action
 
-resize_ = 40
+
 class Dreamer(torch.nn.Module):
     def __init__(self, encoder, decoder, action_space_size, latent_size=11,
-                 gamma=0.99, horizon=12, L=15, replay_buffer=None, lambda_=0.95):
+                 gamma=0.99, horizon=12, L=15, data_replay_buffer=None, lambda_=0.95):
         super().__init__()
         self.gamma = gamma
         self.latent_size = latent_size
@@ -47,27 +48,34 @@ class Dreamer(torch.nn.Module):
         self.decoder = decoder
         self.ae = CnnAE(encoder, decoder)
         self.reward_model = self.build_mlp(input_size=self.latent_size)
-        self.transition_model = self.build_mlp(input_size=self.latent_size + action_space_size, 
+        self.transition_model = self.build_mlp(input_size=self.latent_size + action_space_size,
                                                output_size=latent_size)
         self.world_model_optim = self.build_world_model_optim()
         self.latent_size = encoder.latent_size
         self.H = horizon
         self.L = L
         self.lambda_ = lambda_
-        self.replay_buffer = replay_buffer
+        self.data_replay_buffer = data_replay_buffer
+        (self.states, self.actions,
+          self.rewards, self.next_states) = self.data_replay_buffer
+        self.replay_buffer = create_loader((self.states, self.actions, self.rewards, self.next_states))
 
         self.actor = self.build_mlp(input_size=self.latent_size, output_size=action_space_size)
-        self.policy_optimizer = optim.Adam(self.actor.parameters(), lr=1e-3)
+        self.actor_params = [param for param in self.actor.parameters()]
+        self.actor_optimizer = optim.Adam(self.actor_params, lr=1e-1)
+
         self.critic = self.build_mlp(input_size=self.latent_size)
-        self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=1e-3)
+        self.critic_params = [param for param in self.critic.parameters()]
+        self.critic_optimizer = optim.Adam(self.critic_params, lr=1e-3)
         self.mse_loss = nn.MSELoss()
 
     def build_world_model_optim(self):
         world_model_params = [x for x in self.encoder.parameters()] + [x for x in self.decoder.parameters()]
         world_model_params = world_model_params + [x for x in self.reward_model.parameters()]
         world_model_params = world_model_params + [x for x in self.transition_model.parameters()]
+        self.world_model_params = world_model_params
         return optim.Adam(world_model_params, lr=1e-3)
-    
+
     def build_mlp(self, input_size, output_size=1):
         layers = []
         layers.append(nn.Linear(input_size, self.latent_size * 2))
@@ -80,62 +88,104 @@ class Dreamer(torch.nn.Module):
 
     def train_world_model(self, close_embedding_beta=0, diff_b=0.1):
         mse = nn.MSELoss()
+        mse_reward = nn.MSELoss()
         loader = self.replay_buffer
         world_model_optim = self.world_model_optim
 
         for batch_idx, (state, action, reward, next_state) in enumerate(loader):
 
             world_model_optim.zero_grad()
-            
+
             for t in range(self.L):
                 state_t = state[:, t,:, :, :]
                 action_t = action[:, t]
+                action_onehot_t = action_onehot = F.one_hot(action_t,
+                                                            num_classes=self.action_space_size).type(torch.float)
                 reward_t = reward[:, t].float()
                 next_state_t = next_state[:, t, :, :, :]
-                
+
                 z, mu, logvar = self.encoder(state_t)
-                
+
                 encoded_next_state_hat = new_state_encoded(z, self.transition_model,
-                                                          action_t, self.action_space_size)
+                                                          action_onehot_t, self.action_space_size)
                 next_state_hat = self.decoder(encoded_next_state_hat)
                 recon_loss = mse(next_state_hat, next_state_t)
 
 
                 reward_hat = self.reward_model(z)
-                reward_loss = mse(reward_t, reward_hat)
+                reward_loss = mse_reward(reward_t, reward_hat)
 
                 # remains to implement kl loss
                 # kl_loss = torch.distributions.kl.kl_divergence(z, next_state_hat)
                 enc_next_state, mu, logvar = self.encoder(next_state_t)
                 #enc_next_state = torch.flatten(enc_next_state)
- 
+
                 encoded_next_state_hat = torch.reshape(encoded_next_state_hat,
                                                        enc_next_state.shape)
 
                 diff_embedding = close_embedding_beta * F.mse_loss(enc_next_state, encoded_next_state_hat)
 
                 loss = reward_loss + recon_loss + (diff_b * diff_embedding)
-                print("t {} WorldLoss {}".format(t, loss.item()))
 
                 loss.backward()
                 world_model_optim.step()
+        print("t {} WorldLoss {}".format(t, loss.item()))
+        print("reward loss {}, recon {}".format(reward_loss.item(),
+                                                        recon_loss.item()))
+        print(" ")
 
-    def train(self, init_env, epochs, states, actions, rewards, next_states, dones):
+    def train(self, init_env, epochs):
         replay_buffer = self.replay_buffer
         converged = False
 
-        #while not converged:
+        # while not converged:
         for epoch in range(epochs):
+            print("####")
+            print("starting epoch {}".format(epoch))
+            print("####")
             ## Dynamics learning
             self.train_world_model()
 
-            ## Behavior learning
-            (imagined_trajectories, imagined_actions, imagined_rewards,
-               imagined_values) = self.image_trajectories_rewards_and_values(replay_buffer)
+            ## Behavior
+            for batch_id, buffer_data in enumerate(replay_buffer):
+                self.actor_optimizer.zero_grad()
+                self.critic_optimizer.zero_grad()
+                with ParamsNoGrad(self.world_model_params):
+                    (imagined_states,
+                    imagined_actions) = self.imagine_trajectories(buffer_data)
 
-            self.compute_loss_and_update_parameters(imagined_rewards, imagined_values)
+                # predict rewards and values
+                with ParamsNoGrad(self.world_model_params + self.critic_params):
+                    (predicted_rewards,
+                    predicted_values) = (self.reward_model(imagined_states),
+                                         self.critic(imagined_states))
 
-            ## Env interaction
+                # calculate returns for actor
+                discount_arr = self.gamma * torch.ones_like(predicted_rewards)
+                returns = compute_return(predicted_rewards[:-1], predicted_values[:-1],
+                                         discount_arr[:-1], bootstrap=predicted_values[-1],
+                                         lambda_=self.lambda_)
+                discount_arr = torch.cat([torch.ones_like(discount_arr[:1]), discount_arr[1:]])
+                discount = torch.cumprod(discount_arr[:-1], 0)
+                actor_loss = -torch.mean(discount * returns)
+
+                # calculate values for critic
+                mse_ = torch.nn.MSELoss()
+                with torch.no_grad():
+                    value_feat = imagined_states[:-1].detach()
+                    value_discount = discount.detach()
+                    value_target = returns.detach()
+                critic_pred = dreamer.critic(value_feat)
+                critic_loss = mse_(value_target, critic_pred)
+
+                loss = actor_loss + critic_loss
+                print("batch_id {}, actor loss {}, critic loss {}".format(
+                        batch_id, actor_loss.item(), critic_loss.item()))
+                loss.backward()
+                self.actor_optimizer.step()
+                self.critic_optimizer.step()
+
+            ## ENV INTERACTION
             rollout = []
             states_ = []
             actions_ = []
@@ -145,31 +195,34 @@ class Dreamer(torch.nn.Module):
 
             traj_states = []
             traj_actions = []
-            traj_rewards = [] 
+            traj_rewards = []
             traj_next_states = []
             traj_dones = []
 
-            env = deepcopy(init_env)
+            env = deepcopy(close_init_env)
             obs = env.render('rgb_array')
             obs = cv2.resize(obs, dsize=(resize_, resize_))
-            for t in range(self.L):
-                traj_states.append(obs)
-                obs = torch.unsqueeze(to_tensor(obs), 0)
-                z, mu, logvar = self.encoder(obs)
 
-                action = self.actor(z)
-                action = torch.argmax(action, 1)
-                #action = add_exploration_noise(action)
-                traj_actions.append(action)
+            with torch.no_grad():
+                for t in range(self.L):
+                    traj_states.append(obs)
+                    obs = torch.unsqueeze(to_tensor(obs), 0)
+                    z, mu, logvar = self.encoder(obs)
 
-                obs, reward, done, _ = env.step(action.item())
-                traj_rewards.append(reward)
+                    action_probs = F.softmax(self.actor(z))
+                    dist = torch.distributions.categorical.Categorical(action_probs)
+                    action = dist.sample().item()
+                    #action = add_exploration_noise(action)
+                    traj_actions.append(action)
 
-                obs = cv2.resize(obs, dsize=(resize_, resize_))
-                traj_next_states.append(obs)
+                    obs, reward, done, _ = env.step(action)
+                    traj_rewards.append(reward)
 
-                traj_dones.append(done)
-                
+                    obs = cv2.resize(obs, dsize=(resize_, resize_))
+                    traj_next_states.append(obs)
+
+                    traj_dones.append(done)
+
             states_.append(traj_states)
             actions_.append(traj_actions)
             rewards_.append(traj_rewards)
@@ -180,83 +233,80 @@ class Dreamer(torch.nn.Module):
             rewards_ = np.array(rewards_)
             actions_ = np.array(actions_)
             next_states_ = np.array(next_states_)
-            
-            states = np.concatenate([states, states_], 0)
-            actions = np.concatenate([actions, actions_], 0)
 
-            rewards = np.concatenate([rewards, rewards_], 0)
-            next_states = np.concatenate([next_states, next_states_], 0)
-            
-            scaled_states_actions_dataset = MyDatasetSeq(states, (actions, rewards, next_states), transform=to_tensor)
-            self.replay_buffer = torch.utils.data.DataLoader(scaled_states_actions_dataset, batch_size=32,
-                                                    shuffle=True)
+            self.states = np.concatenate([self.states, states_], 0)
+            self.actions = np.concatenate([self.actions, actions_], 0)
+
+            self.rewards = np.concatenate([self.rewards, rewards_], 0)
+            self.next_states = np.concatenate([self.next_states, next_states_], 0)
+
+            self.replay_buffer = create_loader((self.states, self.actions, self.rewards, self.next_states))
 
 
-    def image_trajectories_rewards_and_values(self, replay_buffer):
-        values = []
-        rewards = []
-        
+    def imagine_trajectories(self, buffer_data):
         #get all states in replay buffer at time t, i.e. o_t/s_t
-        for batch_idx, (state, action, reward, next_state) in enumerate(replay_buffer):
+        obs, _, _, _ = buffer_data
+        batch_imagined_states = []
+        batch_imagined_actions = []
+        for tau in range(self.L):
+            tau = 0
+            obs_tau = obs[:, tau, :, :, :]
 
-            for t in range(self.L):
-                state_t = state[:, t,:, :, :]
-                action_t = action[:, t]
-                reward_t = reward[:, t]
-                next_state_t = next_state[:, t, :, :, :]
-                
-                z, mu, logvar = self.encoder(state_t)
+            with ParamsNoGrad(self.world_model_params):
+                state_tau, mu, logvar = self.encoder(obs_tau)
 
-                # imagine trajectories, starting at time t, i.e s_t (z var in code)
-                rollout_rewards = []
-                rollout_values = []
-                for i in range(self.H):
-                    action_hat_one_hot = self.actor(z)
-                    action_hat = torch.argmax(action_hat_one_hot, dim=1)
-                    action_hat_expanded = torch.unsqueeze(action_hat, 1)
 
-                    reward_t = self.reward_model(z)
-                    value_t = self.critic(z)
-                    
-                    z_expanded = torch.unsqueeze(z, 1)
-                    if i == 0:
-                        rollout_traj_states = z_expanded
-                        rollout_traj_actions = action_hat_expanded
-                        rollout_traj_rewards = reward_t
-                        rollout_traj_values = value_t
-                    else:
-                        rollout_traj_states = torch.cat([rollout_traj_states, z_expanded], 1)
-                        rollout_traj_actions = torch.cat([rollout_traj_actions, action_hat_expanded], 1)
-                        rollout_traj_rewards = torch.cat([rollout_traj_rewards, reward_t], 1)
-                        rollout_traj_values = torch.cat([rollout_traj_values, value_t], 1)
+            with ParamsNoGrad(self.world_model_params):
+                actions = []
+                states = []
+                # dream for H(horizon) timesteps
+                for k in range(self.H):
+                    action_onehot = self.actor(state_tau)
+                    actions.append(torch.argmax(action_onehot, dim=1))
 
-                    z = new_state_encoded(z, self.transition_model, action_hat,
-                                          self.action_space_size)
+                    state_tau = new_state_encoded(state_tau, self.transition_model,
+                                                  action_onehot, self.action_space_size)
+                    states.append(state_tau)
 
-                expanded_traj = torch.unsqueeze(rollout_traj_states, 1)
-                expanded_traj_actions = torch.unsqueeze(rollout_traj_actions, 1)
-                expanded_traj_rewards = torch.unsqueeze(rollout_traj_rewards, 1)
-                expanded_traj_values = torch.unsqueeze(rollout_traj_values, 1)
-                
-                if t == 0 :
-                    imagined_trajectories = expanded_traj
-                    imagined_actions = expanded_traj_actions
-                    imagined_rewards = expanded_traj_rewards
-                    imagined_values = expanded_traj_values
-                else:
-                    imagined_trajectories = torch.cat([imagined_trajectories, expanded_traj], 1)
-                    imagined_actions = torch.cat([imagined_actions, expanded_traj_actions], 1)
-                    imagined_rewards = torch.cat([imagined_rewards, expanded_traj_rewards], 1)
-                    imagined_values = torch.cat([imagined_values, expanded_traj_values], 1)
+                states = torch.stack(states, 1)
+                actions = torch.stack(actions, 1)
+            batch_imagined_states.append(states)
+            batch_imagined_actions.append(actions)
 
-        return imagined_trajectories, imagined_actions, imagined_rewards, imagined_values
-    
+        batch_imagined_states = torch.stack(batch_imagined_states, 0)
+        batch_imagined_states = torch.flatten(batch_imagined_states, 1,2)
+
+        batch_imagined_actions = torch.stack(batch_imagined_actions, 0)
+        batch_imagined_actions = torch.flatten(batch_imagined_actions, 1,2)
+
+        return batch_imagined_states, batch_imagined_actions
+
+    def solve(self, env, max_steps=100):
+        env = deepcopy(close_init_env)
+        obs = env.render('rgb_array')
+        done = False
+        steps = 0
+        ep_return = 0
+        with torch.no_grad():
+            while (not done) and steps < max_steps:
+                obs = cv2.resize(obs, dsize=(resize_, resize_))
+                obs = torch.unsqueeze(to_tensor(obs), 0)
+                z, mu, logvar = self.encoder(obs)
+
+                action_probs = F.softmax(self.actor(z))
+                action = torch.argmax(action_probs, dim=1).item()
+
+                obs, reward, done, _ = env.step(action)
+                ep_return += reward
+                steps += 1
+        print("episode return {}".format(ep_return))
+
     def compute_v_k_N(self, rewards, values, k, tau):
         sum_ = 0
         h = min(tau + k, self.H)
         for n in range(tau, h):
-            sum_ += (self.gamma ** (n - tau)) * rewards[:, n - 1]
-        sum_ += (self.gamma **(h - tau)) * values[:, h - 1]
+            sum_ = sum_ + (self.gamma ** (n - tau)) * rewards[:, n - 1]
+        sum_ = sum_ + (self.gamma **(h - tau)) * values[:, h - 1]
         return sum_
 
     def compute_Vlambda(self, rewards, values):
@@ -268,35 +318,14 @@ class Dreamer(torch.nn.Module):
             for n in range(1, self.H):
                 coeff = self.lambda_ **(n - 1)
                 val = self.compute_v_k_N(rewards, values, n, tau)
-                sum_ += coeff * val
-            sum_ *= (1 - self.lambda_)
+                sum_ = sum_ + coeff * val.clone()
+            sum_ = sum_ * (1 - self.lambda_)
             coeff = self.lambda_ ** (self.H - 1)
-            sum_ += coeff * self.compute_v_k_N(rewards, values, self.H, tau)
-            sum_expanded = torch.unsqueeze(sum_, 1)
+            sum_ = sum_ + coeff * self.compute_v_k_N(rewards, values, self.H, tau).clone()
+            sum_expanded = sum_.unsqueeze(1)
 
             if tau == 1:
                 estimated_values = sum_expanded
             else:
                 estimated_values = torch.cat([estimated_values, sum_expanded],1)
         return estimated_values
-    
-    def compute_loss_and_update_parameters(self, imagined_rewards, imagined_values):
-        print("start of imagined optim")
-        for t in range(self.L):
-            print("t: {}".format(t))
-            self.policy_optimizer.zero_grad()
-            self.critic_optimizer.zero_grad()
-
-            rewards = imagined_rewards[:, t, :]
-            values = imagined_values[:, t, :]
-            est_values = self.compute_Vlambda(rewards, values)
-
-            policy_loss = -torch.sum(est_values)
-            critic_loss = self.mse_loss(values, est_values)
-            loss = policy_loss + critic_loss
-            loss.backward(retain_graph=True)
-            print("loss {}".format(loss))
-
-            self.policy_optimizer.step()
-            self.critic_optimizer.step()
-
